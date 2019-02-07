@@ -18,47 +18,81 @@ jest.unmock('cosmiconfig');
 
 jest.setTimeout(120 * 1000);
 
-it('should build the dependency graph', async () => {
-  const entryPoint = path.resolve(
-    __dirname,
-    '..',
-    'basic_bundle',
-    'TestBundle.js',
-  );
+const JestHasteMap = require('jest-haste-map');
 
-  const config = await Metro.loadConfig({
-    config: require.resolve('../metro.config.js'),
+jest.mock('jest-haste-map', () => {
+  const JestHasteMap = require.requireActual('jest-haste-map');
+  const mockConstructor = jest.fn((...args) => new JestHasteMap(...args));
+  mockConstructor.ModuleMap = JestHasteMap.ModuleMap;
+  Object.keys(JestHasteMap);
+  return mockConstructor;
+});
+describe('Build Graph', () => {
+  beforeEach(() => {
+    JestHasteMap.mockClear();
   });
+  it('should build the dependency graph', async () => {
+    const entryPoint = path.resolve(
+      __dirname,
+      '..',
+      'basic_bundle',
+      'TestBundle.js',
+    );
 
-  const graph = await Metro.buildGraph(config, {
-    entries: [entryPoint],
+    const config = await Metro.loadConfig({
+      config: require.resolve('../metro.config.js'),
+    });
+
+    const graph = await Metro.buildGraph(config, {
+      entries: [entryPoint],
+    });
+
+    expect(
+      Array.from(graph.dependencies.entries()).map(([filePath, dep]) => ({
+        file: path.basename(filePath),
+        types: dep.output.map(output => output.type),
+      })),
+    ).toEqual([
+      {file: 'TestBundle.js', types: ['js/module']},
+      {file: 'Bar.js', types: ['js/module']},
+      {file: 'Foo.js', types: ['js/module']},
+      {file: 'test.png', types: ['js/module/asset']},
+      {file: 'AssetRegistry.js', types: ['js/module']},
+      {file: 'TypeScript.ts', types: ['js/module']},
+    ]);
+
+    expect(graph.dependencies.get(entryPoint)).toEqual(
+      expect.objectContaining({
+        path: entryPoint,
+        inverseDependencies: new Set(),
+        output: [
+          expect.objectContaining({
+            type: 'js/module',
+          }),
+        ],
+      }),
+    );
+
+    expect(graph.dependencies.get(entryPoint).output).toMatchSnapshot();
   });
+  it('JestHasteMap should initialize with watch = false', async () => {
+    const entryPoint = path.resolve(
+      __dirname,
+      '..',
+      'basic_bundle',
+      'TestBundle.js',
+    );
 
-  expect(
-    Array.from(graph.dependencies.entries()).map(([filePath, dep]) => ({
-      file: path.basename(filePath),
-      types: dep.output.map(output => output.type),
-    })),
-  ).toEqual([
-    {file: 'TestBundle.js', types: ['js/module']},
-    {file: 'Bar.js', types: ['js/module']},
-    {file: 'Foo.js', types: ['js/module']},
-    {file: 'test.png', types: ['js/module/asset']},
-    {file: 'AssetRegistry.js', types: ['js/module']},
-    {file: 'TypeScript.ts', types: ['js/module']},
-  ]);
+    const config = await Metro.loadConfig({
+      config: require.resolve('../metro.config.js'),
+    });
 
-  expect(graph.dependencies.get(entryPoint)).toEqual(
-    expect.objectContaining({
-      path: entryPoint,
-      inverseDependencies: new Set(),
-      output: [
-        expect.objectContaining({
-          type: 'js/module',
-        }),
-      ],
-    }),
-  );
-
-  expect(graph.dependencies.get(entryPoint).output).toMatchSnapshot();
+    await Metro.buildGraph(
+      {...config, watch: false},
+      {
+        entries: [entryPoint],
+      },
+    );
+    expect(JestHasteMap.mock.calls[0][0].watch).toBeFalsy();
+  });
 });

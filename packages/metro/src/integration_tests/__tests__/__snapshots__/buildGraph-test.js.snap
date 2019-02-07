@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`should build the dependency graph 1`] = `
+exports[`Build Graph should build the dependency graph 1`] = `
 Array [
   Object {
     "data": Object {
